@@ -22,6 +22,7 @@ interface UseTasksState {
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   undoDelete: () => void;
+  clearLastDeleted: () => void; 
 }
 
 const INITIAL_METRICS: Metrics = {
@@ -39,7 +40,6 @@ export function useTasks(): UseTasksState {
   const [error, setError] = useState<string | null>(null);
   const [lastDeleted, setLastDeleted] = useState<Task | null>(null);
 
-  // Guard to ensure tasks load only once
   const fetchedRef = useRef(false);
 
   function normalizeTasks(input: any[]): Task[] {
@@ -83,7 +83,6 @@ export function useTasks(): UseTasksState {
 
         const data = (await res.json()) as any[];
         const normalized = normalizeTasks(data);
-
         const finalData =
           normalized.length > 0 ? normalized : generateSalesTasks(50);
 
@@ -161,9 +160,7 @@ export function useTasks(): UseTasksState {
           updated.completedAt = new Date().toISOString();
         }
 
-        if (updated.timeTaken <= 0) {
-          updated.timeTaken = 1;
-        }
+        if (updated.timeTaken <= 0) updated.timeTaken = 1;
 
         return updated;
       }),
@@ -184,6 +181,11 @@ export function useTasks(): UseTasksState {
     setLastDeleted(null);
   }, [lastDeleted]);
 
+  
+  const clearLastDeleted = useCallback(() => {
+    setLastDeleted(null);
+  }, []);
+
   return {
     tasks,
     loading,
@@ -195,5 +197,6 @@ export function useTasks(): UseTasksState {
     updateTask,
     deleteTask,
     undoDelete,
+    clearLastDeleted,
   };
 }
