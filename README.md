@@ -1,4 +1,4 @@
-## ✅ SDE Assignment – Bug Fixes Completed
+### ✅ SDE Assignment – Bug Fixes Completed
 
 All 5 mandatory bugs have been fixed:
 
