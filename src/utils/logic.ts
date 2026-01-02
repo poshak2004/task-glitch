@@ -9,10 +9,8 @@ export function computeROI(revenue: number, timeTaken: number): number {
   return Number((revenue / timeTaken).toFixed(2));
 }
 
-export function computePriorityWeight(
-  p: Task['priority'],
-): 1 | 2 | 3 {
-  return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
+export function computePriorityWeight(priority: Task['priority']): 1 | 2 | 3 {
+  return priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
 }
 
 export function withDerived(task: Task): DerivedTask {
@@ -23,9 +21,7 @@ export function withDerived(task: Task): DerivedTask {
   };
 }
 
-export function sortTasks(
-  tasks: ReadonlyArray<DerivedTask>,
-): DerivedTask[] {
+export function sortTasks(tasks: ReadonlyArray<DerivedTask>): DerivedTask[] {
   return [...tasks].sort((a, b) => {
     if (b.roi !== a.roi) return b.roi - a.roi;
     if (b.priorityWeight !== a.priorityWeight) {
@@ -38,28 +34,30 @@ export function sortTasks(
   });
 }
 
-/* ================= METRICS ================= */
+/* ================= CORE METRICS ================= */
 
-export function computeTotalRevenue(tasks: Task[]): number {
+export function computeTotalRevenue(tasks: ReadonlyArray<Task>): number {
   return tasks
     .filter(t => t.status === 'Done')
     .reduce((s, t) => s + t.revenue, 0);
 }
 
-export function computeTimeEfficiency(tasks: Task[]): number {
+export function computeTotalTimeTaken(tasks: ReadonlyArray<Task>): number {
+  return tasks.reduce((s, t) => s + t.timeTaken, 0);
+}
+
+export function computeTimeEfficiency(tasks: ReadonlyArray<Task>): number {
   if (!tasks.length) return 0;
   const done = tasks.filter(t => t.status === 'Done').length;
   return (done / tasks.length) * 100;
 }
 
-export function computeRevenuePerHour(tasks: Task[]): number {
-  const time = tasks.reduce((s, t) => s + t.timeTaken, 0);
-  return time
-    ? Number((computeTotalRevenue(tasks) / time).toFixed(2))
-    : 0;
+export function computeRevenuePerHour(tasks: ReadonlyArray<Task>): number {
+  const time = computeTotalTimeTaken(tasks);
+  return time ? Number((computeTotalRevenue(tasks) / time).toFixed(2)) : 0;
 }
 
-export function computeAverageROI(tasks: Task[]): number {
+export function computeAverageROI(tasks: ReadonlyArray<Task>): number {
   if (!tasks.length) return 0;
   return Number(
     (
@@ -72,41 +70,11 @@ export function computeAverageROI(tasks: Task[]): number {
 }
 
 export function computePerformanceGrade(
-  avg: number,
+  avgROI: number,
 ): 'Excellent' | 'Good' | 'Needs Improvement' {
-  if (avg > 500) return 'Excellent';
-  if (avg >= 200) return 'Good';
+  if (avgROI > 500) return 'Excellent';
+  if (avgROI >= 200) return 'Good';
   return 'Needs Improvement';
-}
-
-/* ================= FUNNEL ================= */
-
-export type FunnelCounts = {
-  todo: number;
-  inProgress: number;
-  done: number;
-  conversionTodoToInProgress: number;
-  conversionInProgressToDone: number;
-};
-
-export function computeFunnel(tasks: Task[]): FunnelCounts {
-  const todo = tasks.filter(t => t.status === 'Todo').length;
-  const inProgress = tasks.filter(t => t.status === 'In Progress').length;
-  const done = tasks.filter(t => t.status === 'Done').length;
-
-  const base = todo + inProgress + done;
-
-  return {
-    todo,
-    inProgress,
-    done,
-    conversionTodoToInProgress: base
-      ? (inProgress + done) / base
-      : 0,
-    conversionInProgressToDone: inProgress
-      ? done / inProgress
-      : 0,
-  };
 }
 
 /* ================= TIME HELPERS ================= */
@@ -117,10 +85,33 @@ export function daysBetween(aISO: string, bISO: string): number {
   return Math.max(0, Math.round((b - a) / (24 * 60 * 60 * 1000)));
 }
 
-/* ================= ADVANCED ANALYTICS ================= */
+/* ================= ANALYTICS (REQUIRED) ================= */
+
+export type FunnelCounts = {
+  todo: number;
+  inProgress: number;
+  done: number;
+  conversionTodoToInProgress: number;
+  conversionInProgressToDone: number;
+};
+
+export function computeFunnel(tasks: ReadonlyArray<Task>): FunnelCounts {
+  const todo = tasks.filter(t => t.status === 'Todo').length;
+  const inProgress = tasks.filter(t => t.status === 'In Progress').length;
+  const done = tasks.filter(t => t.status === 'Done').length;
+  const total = todo + inProgress + done;
+
+  return {
+    todo,
+    inProgress,
+    done,
+    conversionTodoToInProgress: total ? (inProgress + done) / total : 0,
+    conversionInProgressToDone: inProgress ? done / inProgress : 0,
+  };
+}
 
 export function computeVelocityByPriority(
-  tasks: Task[],
+  tasks: ReadonlyArray<Task>,
 ): Record<Task['priority'], { avgDays: number; medianDays: number }> {
   const groups: Record<Task['priority'], number[]> = {
     High: [],
@@ -136,19 +127,14 @@ export function computeVelocityByPriority(
     }
   });
 
-  const result = {
-    High: { avgDays: 0, medianDays: 0 },
-    Medium: { avgDays: 0, medianDays: 0 },
-    Low: { avgDays: 0, medianDays: 0 },
-  };
+  const result: Record<Task['priority'], { avgDays: number; medianDays: number }> =
+    { High: { avgDays: 0, medianDays: 0 }, Medium: { avgDays: 0, medianDays: 0 }, Low: { avgDays: 0, medianDays: 0 } };
 
-  (Object.keys(groups) as Task['priority'][]).forEach(k => {
-    const arr = groups[k].sort((a, b) => a - b);
-    if (!arr.length) return;
-
-    result[k] = {
-      avgDays: arr.reduce((s, v) => s + v, 0) / arr.length,
-      medianDays: arr[Math.floor(arr.length / 2)],
+  (Object.keys(groups) as Task['priority'][]).forEach(p => {
+    const arr = groups[p].sort((a, b) => a - b);
+    result[p] = {
+      avgDays: arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0,
+      medianDays: arr.length ? arr[Math.floor(arr.length / 2)] : 0,
     };
   });
 
@@ -156,7 +142,7 @@ export function computeVelocityByPriority(
 }
 
 export function computeThroughputByWeek(
-  tasks: Task[],
+  tasks: ReadonlyArray<Task>,
 ): Array<{ week: string; count: number; revenue: number }> {
   const map = new Map<string, { count: number; revenue: number }>();
 
@@ -164,25 +150,18 @@ export function computeThroughputByWeek(
     if (!t.completedAt) return;
     const d = new Date(t.completedAt);
     const week = `${d.getUTCFullYear()}-W${getWeekNumber(d)}`;
-
-    const curr = map.get(week) ?? { count: 0, revenue: 0 };
-    curr.count += 1;
-    curr.revenue += t.revenue;
-    map.set(week, curr);
+    const v = map.get(week) ?? { count: 0, revenue: 0 };
+    v.count += 1;
+    v.revenue += t.revenue;
+    map.set(week, v);
   });
 
-  return Array.from(map.entries()).map(([week, v]) => ({
-    week,
-    ...v,
-  }));
+  return Array.from(map.entries()).map(([week, v]) => ({ week, ...v }));
 }
 
-export function computeWeightedPipeline(tasks: Task[]): number {
+export function computeWeightedPipeline(tasks: ReadonlyArray<Task>): number {
   const weights = { Todo: 0.1, 'In Progress': 0.5, Done: 1 } as const;
-  return tasks.reduce(
-    (s, t) => s + t.revenue * weights[t.status],
-    0,
-  );
+  return tasks.reduce((s, t) => s + t.revenue * weights[t.status], 0);
 }
 
 export function computeForecast(
@@ -201,31 +180,19 @@ export function computeForecast(
   const sumXX = x.reduce((s, v) => s + v * v, 0);
 
   const slope =
-    (n * sumXY - sumX * sumY) /
-    (n * sumXX - sumX * sumX || 1);
+    (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX || 1);
   const intercept = (sumY - slope * sumX) / n;
 
-  const lastIndex = x[x.length - 1];
-  return Array.from({ length: horizonWeeks }).map((_, i) => ({
+  return Array.from({ length: horizonWeeks }, (_, i) => ({
     week: `+${i + 1}`,
-    revenue: Math.max(0, slope * (lastIndex + i + 1) + intercept),
+    revenue: Math.max(0, slope * (x.length + i) + intercept),
   }));
 }
 
-/* ================= HELPERS ================= */
-
 function getWeekNumber(d: Date): number {
-  const target = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
-  );
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const dayNr = (target.getUTCDay() + 6) % 7;
   target.setUTCDate(target.getUTCDate() - dayNr + 3);
   const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  return (
-    1 +
-    Math.round(
-      (target.getTime() - firstThursday.getTime()) /
-        (7 * 24 * 60 * 60 * 1000),
-    )
-  );
+  return 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 86400000));
 }
