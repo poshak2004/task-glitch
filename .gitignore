@@ -6,4 +6,4 @@ dist
 /.vite
 /.idea
 /.vscode
-
+.env
