@@ -24,7 +24,7 @@ import { UserProvider, useUser } from '@/context/UserContext';
 import { TasksProvider, useTasksContext } from '@/context/TasksContext';
 
 import { downloadCSV, toCSV } from '@/utils/csv';
-import type { Task } from '@/types';
+import type { Task, TaskInput } from '@/types';
 import {
   computeAverageROI,
   computePerformanceGrade,
@@ -75,8 +75,9 @@ function AppContent() {
     });
   }, [derivedSorted, q, fStatus, fPriority]);
 
+  // ✅ FIXED: TaskInput instead of Omit<Task, 'id'>
   const handleAdd = useCallback(
-    (payload: Omit<Task, 'id'>) => {
+    (payload: TaskInput) => {
       addTask(payload);
       setActivity(prev => [
         createActivity('add', `Added: ${payload.title}`),
@@ -116,7 +117,6 @@ function AppContent() {
     ].slice(0, 50));
   }, [undoDelete, createActivity]);
 
-  // ✅ BUG 2 FIX — clear stale deleted task when snackbar closes
   const handleCloseUndo = useCallback(() => {
     clearLastDeleted();
   }, [clearLastDeleted]);

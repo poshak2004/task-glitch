@@ -12,12 +12,13 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { Priority, Status, Task } from '@/types';
+
+import { Priority, Status, Task, TaskInput } from '@/types';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onSubmit: (value: Omit<Task, 'id'> & { id?: string }) => void;
+  onSubmit: (value: TaskInput) => void;
   existingTitles: string[];
   initial?: Task | null;
 }
@@ -85,14 +86,14 @@ export default function TaskForm({
   const handleSubmit = () => {
     if (!canSubmit) return;
 
-    const payload: Omit<Task, 'id'> & { id?: string } = {
-      title: title.trim(),
-      revenue: revenue as number,
-      timeTaken: timeTaken as number,
-      priority: priority as Priority,
-      status: status as Status,
-      notes: notes.trim() || undefined,
+    const payload: TaskInput = {
       ...(initial ? { id: initial.id } : {}),
+      title: title.trim(),
+      revenue,
+      timeTaken,
+      priority,
+      status,
+      notes: notes.trim() || undefined,
     };
 
     onSubmit(payload);
@@ -111,8 +112,8 @@ export default function TaskForm({
             onChange={e => setTitle(e.target.value)}
             error={!!title && duplicateTitle}
             helperText={duplicateTitle ? 'Duplicate title not allowed' : ' '}
-            required
             autoFocus
+            required
           />
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -123,13 +124,13 @@ export default function TaskForm({
               onChange={e =>
                 setRevenue(e.target.value === '' ? '' : Number(e.target.value))
               }
-              inputProps={{ min: 0, step: 1 }}
+              inputProps={{ min: 0 }}
               required
               fullWidth
             />
 
             <TextField
-              label="Time Taken (h)"
+              label="Time Taken (hours)"
               type="number"
               value={timeTaken}
               onChange={e =>
@@ -137,9 +138,7 @@ export default function TaskForm({
                   e.target.value === '' ? '' : Number(e.target.value),
                 )
               }
-              error={typeof timeTaken === 'number' && timeTaken <= 0}
-              helperText="Must be greater than 0"
-              inputProps={{ min: 1, step: 1 }}
+              inputProps={{ min: 1 }}
               required
               fullWidth
             />
@@ -147,9 +146,8 @@ export default function TaskForm({
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <FormControl fullWidth required>
-              <InputLabel id="priority-label">Priority</InputLabel>
+              <InputLabel>Priority</InputLabel>
               <Select
-                labelId="priority-label"
                 label="Priority"
                 value={priority}
                 onChange={e => setPriority(e.target.value as Priority)}
@@ -163,9 +161,8 @@ export default function TaskForm({
             </FormControl>
 
             <FormControl fullWidth required>
-              <InputLabel id="status-label">Status</InputLabel>
+              <InputLabel>Status</InputLabel>
               <Select
-                labelId="status-label"
                 label="Status"
                 value={status}
                 onChange={e => setStatus(e.target.value as Status)}

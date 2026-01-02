@@ -1,176 +1,67 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DerivedTask, Metrics, Task } from '@/types';
-import {
-  computeAverageROI,
-  computePerformanceGrade,
-  computeRevenuePerHour,
-  computeTimeEfficiency,
-  computeTotalRevenue,
-  withDerived,
-  sortTasks as sortDerived,
-} from '@/utils/logic';
+import { Task, DerivedTask, TaskInput } from '@/types';
+import { withDerived, sortTasks } from '@/utils/logic';
 import { generateSalesTasks } from '@/utils/seed';
 
-interface UseTasksState {
-  tasks: Task[];
-  loading: boolean;
-  error: string | null;
-  derivedSorted: DerivedTask[];
-  metrics: Metrics;
-  lastDeleted: Task | null;
-  addTask: (task: Omit<Task, 'id'> & { id?: string }) => void;
-  updateTask: (id: string, patch: Partial<Task>) => void;
-  deleteTask: (id: string) => void;
-  undoDelete: () => void;
-  clearLastDeleted: () => void; 
-}
-
-const INITIAL_METRICS: Metrics = {
-  totalRevenue: 0,
-  totalTimeTaken: 0,
-  timeEfficiencyPct: 0,
-  revenuePerHour: 0,
-  averageROI: 0,
-  performanceGrade: 'Needs Improvement',
-};
-
-export function useTasks(): UseTasksState {
+export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastDeleted, setLastDeleted] = useState<Task | null>(null);
-
-  const fetchedRef = useRef(false);
-
-  function normalizeTasks(input: any[]): Task[] {
-    const now = Date.now();
-
-    return (Array.isArray(input) ? input : []).map((t, idx) => {
-      const createdAt = t.createdAt
-        ? new Date(t.createdAt)
-        : new Date(now - (idx + 1) * 24 * 60 * 60 * 1000);
-
-      const completedAt =
-        t.completedAt ||
-        (t.status === 'Done'
-          ? new Date(createdAt.getTime() + 24 * 60 * 60 * 1000).toISOString()
-          : undefined);
-
-      return {
-        id: t.id ?? crypto.randomUUID(),
-        title: t.title,
-        revenue: Number(t.revenue) || 0,
-        timeTaken: Number(t.timeTaken) > 0 ? Number(t.timeTaken) : 1,
-        priority: t.priority,
-        status: t.status,
-        notes: t.notes,
-        createdAt: createdAt.toISOString(),
-        completedAt,
-      };
-    });
-  }
+  const fetched = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (fetched.current) return;
+    fetched.current = true;
 
-    let isMounted = true;
-
-    async function loadTasks() {
-      try {
-        const res = await fetch('/tasks.json');
-        if (!res.ok) throw new Error(`Failed to load tasks.json (${res.status})`);
-
-        const data = (await res.json()) as any[];
-        const normalized = normalizeTasks(data);
-        const finalData =
-          normalized.length > 0 ? normalized : generateSalesTasks(50);
-
-        if (isMounted) setTasks(finalData);
-      } catch (e: any) {
-        if (isMounted) setError(e?.message ?? 'Failed to load tasks');
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+    try {
+      setTasks(generateSalesTasks(30));
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to load tasks');
+    } finally {
+      setLoading(false);
     }
-
-    loadTasks();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
-  const derivedSorted = useMemo<DerivedTask[]>(() => {
-    const withRoi = tasks.map(withDerived);
-    return sortDerived(withRoi);
-  }, [tasks]);
+  const derivedSorted = useMemo<DerivedTask[]>(
+    () => sortTasks(tasks.map(withDerived)),
+    [tasks],
+  );
 
-  const metrics = useMemo<Metrics>(() => {
-    if (tasks.length === 0) return INITIAL_METRICS;
-
-    const totalRevenue = computeTotalRevenue(tasks);
-    const totalTimeTaken = tasks.reduce((sum, t) => sum + t.timeTaken, 0);
-    const timeEfficiencyPct = computeTimeEfficiency(tasks);
-    const revenuePerHour = computeRevenuePerHour(tasks);
-    const averageROI = computeAverageROI(tasks);
-    const performanceGrade = computePerformanceGrade(averageROI);
-
-    return {
-      totalRevenue,
-      totalTimeTaken,
-      timeEfficiencyPct,
-      revenuePerHour,
-      averageROI,
-      performanceGrade,
-    };
-  }, [tasks]);
-
-  const addTask = useCallback((task: Omit<Task, 'id'> & { id?: string }) => {
-    setTasks(prev => {
-      const id = task.id ?? crypto.randomUUID();
-      const createdAt = new Date().toISOString();
-      const completedAt = task.status === 'Done' ? createdAt : undefined;
-
-      return [
-        ...prev,
-        {
-          ...task,
-          id,
-          timeTaken: task.timeTaken > 0 ? task.timeTaken : 1,
-          createdAt,
-          completedAt,
-        },
-      ];
-    });
+  const addTask = useCallback((input: TaskInput) => {
+    setTasks(prev => [
+      ...prev,
+      {
+        ...input,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        completedAt:
+          input.status === 'Done' ? new Date().toISOString() : undefined,
+      },
+    ]);
   }, []);
 
   const updateTask = useCallback((id: string, patch: Partial<Task>) => {
     setTasks(prev =>
-      prev.map(task => {
-        if (task.id !== id) return task;
-
-        const updated = { ...task, ...patch };
-
-        if (
-          task.status !== 'Done' &&
-          updated.status === 'Done' &&
-          !updated.completedAt
-        ) {
-          updated.completedAt = new Date().toISOString();
-        }
-
-        if (updated.timeTaken <= 0) updated.timeTaken = 1;
-
-        return updated;
-      }),
+      prev.map(t =>
+        t.id === id
+          ? {
+              ...t,
+              ...patch,
+              completedAt:
+                patch.status === 'Done' && !t.completedAt
+                  ? new Date().toISOString()
+                  : t.completedAt,
+            }
+          : t,
+      ),
     );
   }, []);
 
   const deleteTask = useCallback((id: string) => {
     setTasks(prev => {
-      const target = prev.find(t => t.id === id) || null;
-      setLastDeleted(target);
+      const found = prev.find(t => t.id === id) ?? null;
+      setLastDeleted(found);
       return prev.filter(t => t.id !== id);
     });
   }, []);
@@ -181,7 +72,6 @@ export function useTasks(): UseTasksState {
     setLastDeleted(null);
   }, [lastDeleted]);
 
-  
   const clearLastDeleted = useCallback(() => {
     setLastDeleted(null);
   }, []);
@@ -191,7 +81,6 @@ export function useTasks(): UseTasksState {
     loading,
     error,
     derivedSorted,
-    metrics,
     lastDeleted,
     addTask,
     updateTask,

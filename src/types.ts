@@ -9,22 +9,24 @@ export interface Task {
   priority: Priority;
   status: Status;
   notes?: string;
-  createdAt: string; // ISO date string
-  completedAt?: string; // ISO date string if Done
+  createdAt: string;
+  completedAt?: string;
 }
 
+export type TaskInput = Omit<Task, 'id' | 'createdAt' | 'completedAt'> & {
+  id?: string;
+};
+
 export interface DerivedTask extends Task {
-  roi: number | null; // null means N/A
-  priorityWeight: 3 | 2 | 1;
+  roi: number;
+  priorityWeight: 1 | 2 | 3;
 }
 
 export interface Metrics {
   totalRevenue: number;
   totalTimeTaken: number;
-  timeEfficiencyPct: number; // 0..100
-  revenuePerHour: number; // may be NaN/Infinity -> handle in UI
-  averageROI: number; // average over valid ROI values
+  timeEfficiencyPct: number;
+  revenuePerHour: number;
+  averageROI: number;
   performanceGrade: 'Excellent' | 'Good' | 'Needs Improvement';
 }
-
-
